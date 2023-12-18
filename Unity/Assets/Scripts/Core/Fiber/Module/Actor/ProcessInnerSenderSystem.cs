@@ -39,6 +39,7 @@ namespace ET
         {
             if (messageInfo.MessageObject is IResponse response)
             {
+                //如果该消息是返回消息，则进入处理返回消息的逻辑
                 self.HandleIActorResponse(response);
                 return;
             }
@@ -46,7 +47,9 @@ namespace ET
             ActorId actorId = messageInfo.ActorId;
             MessageObject message = messageInfo.MessageObject;
 
+            //找到该Actor的MailBoxComponent
             MailBoxComponent mailBoxComponent = self.Fiber().Mailboxes.Get(actorId.InstanceId);
+            //如果没有，则消息作废，如果消息是请求消息，则会返回一个调用错误
             if (mailBoxComponent == null)
             {
                 Log.Warning($"actor not found mailbox, from: {actorId} current: {fiber.Address} {message}");
@@ -58,6 +61,7 @@ namespace ET
                 message.Dispose();
                 return;
             }
+            //将需要发送的消息进行分发
             mailBoxComponent.Add(actorId.Address, message);
         }
 
@@ -108,12 +112,13 @@ namespace ET
                 throw new Exception($"actor inner process diff: {actorId.Process} {fiber.Process}");
             }
 
+            //如果是相同纤程的消息，则可以直接处理
             if (actorId.Fiber == fiber.Id)
             {
                 self.HandleMessage(fiber, new MessageInfo() {ActorId = actorId, MessageObject = message});
                 return;
             }
-            
+            //否则，将消息存入对应纤程的消息队列中
             MessageQueue.Instance.Send(fiber.Address, actorId, message);
         }
 
@@ -159,15 +164,18 @@ namespace ET
             
             var tcs = ETTask<IResponse>.Create(true);
 
+            //添加进等待回复的列表内，key = rpcId
+            //返回消息会带rpcId,收到后从该列表内取出对应的事件抛出
             self.requestCallback.Add(rpcId, new MessageSenderStruct(actorId, iRequest, tcs, needException));
             
             self.SendInner(actorId, (MessageObject)iRequest);
 
-            
+            //超时判断
             async ETTask Timeout()
             {
+                //等待超时，这里不传入
                 await fiber.Root.GetComponent<TimerComponent>().WaitAsync(ProcessInnerSender.TIMEOUT_TIME);
-
+                //不存在说明该消息已经收到返回并且处理了。
                 if (!self.requestCallback.Remove(rpcId, out MessageSenderStruct action))
                 {
                     return;

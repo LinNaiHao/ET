@@ -59,12 +59,14 @@ namespace ET
 			return Encoding.UTF8.GetString(bytes, index, count);
 		}
 
+		//将一个无符号整数按照小端字节序写入到字节数组中的指定位置
+		//消耗四个字节
 		public static void WriteTo(this byte[] bytes, int offset, uint num)
 		{
-			bytes[offset] = (byte)(num & 0xff);
-			bytes[offset + 1] = (byte)((num & 0xff00) >> 8);
-			bytes[offset + 2] = (byte)((num & 0xff0000) >> 16);
-			bytes[offset + 3] = (byte)((num & 0xff000000) >> 24);
+			bytes[offset] = (byte)(num & 0xff); // 将 num 的低 8 位写入到 bytes[offset] 的位置
+			bytes[offset + 1] = (byte)((num & 0xff00) >> 8); // 将 num 的第 9-16 位写入到 bytes[offset + 1] 的位置
+			bytes[offset + 2] = (byte)((num & 0xff0000) >> 16); // 将 num 的第 17-24 位写入到 bytes[offset + 2] 的位置
+			bytes[offset + 3] = (byte)((num & 0xff000000) >> 24); // 将 num 的第 25-32 位写入到 bytes[offset + 3] 的位置
 		}
 		
 		public static void WriteTo(this byte[] bytes, int offset, ActorId num)

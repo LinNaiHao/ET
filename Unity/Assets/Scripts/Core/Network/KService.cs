@@ -11,14 +11,14 @@ namespace ET
 {
     public static class KcpProtocalType
     {
-        public const byte SYN = 1;
-        public const byte ACK = 2;
-        public const byte FIN = 3;
-        public const byte MSG = 4;
-        public const byte RouterReconnectSYN = 5;
-        public const byte RouterReconnectACK = 6;
-        public const byte RouterSYN = 7;
-        public const byte RouterACK = 8;
+        public const byte SYN = 1; //同步消息，建立连接请求
+        public const byte ACK = 2; //确认消息，确认连接建立
+        public const byte FIN = 3; //断开连接
+        public const byte MSG = 4; //普通消息
+        public const byte RouterReconnectSYN = 5; //路由重连请求
+        public const byte RouterReconnectACK = 6; //路由重连确认
+        public const byte RouterSYN = 7; //路由新连接请求
+        public const byte RouterACK = 8; //路由新连接确认
     }
 
     public enum ServiceType
@@ -111,6 +111,7 @@ namespace ET
         public readonly ArrayPool<byte> byteArrayPool = ArrayPool<byte>.Create(2048,200);
 #endif
 
+        //路由连接请求的回调，收到路由服的确认消息后，会从这里取出对应的回调执行
         private readonly Dictionary<long, Action<byte>> routerAckCallback = new();
 
         public void AddRouterAckCallback(long id, Action<byte> action)

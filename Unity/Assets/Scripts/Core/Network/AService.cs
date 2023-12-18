@@ -7,6 +7,7 @@ namespace ET
 {
     public abstract class AService: IDisposable
     {
+        //
         public Action<long, IPEndPoint> AcceptCallback;
         public Action<long, MemoryBuffer> ReadCallback;
         public Action<long, int> ErrorCallback;

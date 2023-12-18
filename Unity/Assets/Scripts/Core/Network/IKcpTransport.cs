@@ -23,6 +23,7 @@ namespace ET
         public UdpTransport(AddressFamily addressFamily)
         {
             this.socket = new Socket(addressFamily, SocketType.Dgram, ProtocolType.Udp);
+            //禁用Window平台的套接字连接重置
             NetworkHelper.SetSioUdpConnReset(this.socket);
         }
         
@@ -47,6 +48,13 @@ namespace ET
             NetworkHelper.SetSioUdpConnReset(this.socket);
         }
         
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="bytes">消息内容</param>
+        /// <param name="index">开始位置</param>
+        /// <param name="length">结束位置</param>
+        /// <param name="endPoint">目标地址，客户端发送的请求，这里指路由地址</param>
         public void Send(byte[] bytes, int index, int length, EndPoint endPoint)
         {
             this.socket.SendTo(bytes, index, length, SocketFlags.None, endPoint);

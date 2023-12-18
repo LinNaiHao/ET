@@ -12,6 +12,7 @@ namespace ET.Client
         {
             NetComponent netComponent = self.GetParent<NetComponent>();
             KService kService = (KService)netComponent.AService;
+            //添加路由连接请求确认的回调
             kService.AddRouterAckCallback(self.Id, (flag) =>
             {
                 self.Flag = flag;
@@ -22,6 +23,7 @@ namespace ET.Client
         {
             NetComponent netComponent = self.GetParent<NetComponent>();
             KService kService = (KService)netComponent.AService;
+            //移除回调
             kService.RemoveRouterAckCallback(self.Id);
         }
 
