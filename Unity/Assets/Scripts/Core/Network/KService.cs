@@ -66,6 +66,8 @@ namespace ET
             }
         }
 
+        //客户端的NetComponent的Kservice创建方法
+        //m
         public KService(AddressFamily addressFamily, NetworkProtocol protocol, ServiceType serviceType)
         {
             this.ServiceType = serviceType;
@@ -174,8 +176,10 @@ namespace ET
                 return;
             }
 
+
             while (this.Transport != null && this.Transport.Available() > 0)
             {
+                //接收消息并且更新消息的来源地址,存在 this.ipEndPoint
                 int messageLength = this.Transport.Recv(this.cache, ref this.ipEndPoint);
                 // 长度小于1，不是正常的消息
                 if (messageLength < 1)

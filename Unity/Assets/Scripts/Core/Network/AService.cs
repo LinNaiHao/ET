@@ -16,6 +16,7 @@ namespace ET
         
         public ServiceType ServiceType { get; protected set; }
         
+        //池子内最大的内存容器大小，超过该大小的MemoryBuffer不会回收，也不会从池子内获取而是直接创建
         private const int MaxMemoryBufferSize = 1024;
 		
         private readonly Queue<MemoryBuffer> pool = new();
