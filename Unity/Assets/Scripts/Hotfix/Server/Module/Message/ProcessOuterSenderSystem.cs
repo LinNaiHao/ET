@@ -69,17 +69,21 @@ namespace ET.Server
                 case ILocationRequest:
                 case IRequest:
                 {
-                    async ETTask Call()
+                    CallInner().Coroutine();
+                    break;
+
+                    async ETTask CallInner()
                     {
-                        IRequest request = (IRequest)message;
+                        IRequest req = (IRequest)message;
+                        int rpcId = req.RpcId;
                         // 注意这里都不能抛异常，因为这里只是中转消息
-                        IResponse response = await fiber.Root.GetComponent<ProcessInnerSender>().Call(actorId, request, false);
+                        IResponse res = await fiber.Root.GetComponent<ProcessInnerSender>().Call(actorId, req, false);
                         // 注意这里的response会在该协程执行完之后由ProcessInnerSender dispose。
                         actorId.Process = fromProcess;
-                        self.Send(actorId, response);
+                        res.RpcId = rpcId;
+                        self.Send(actorId, res);
+                        ((MessageObject)res).Dispose();
                     }
-                    Call().Coroutine();
-                    break;
                 }
                 default:
                 {
@@ -148,20 +152,17 @@ namespace ET.Server
         {
             if (response.Error == ErrorCore.ERR_MessageTimeout)
             {
-                self.Tcs.SetException(new RpcException(response.Error, $"Rpc error: request, 注意Actor消息超时，请注意查看是否死锁或者没有reply: actorId: {self.ActorId} {self.Request}, response: {response}"));
+                self.SetException(new RpcException(response.Error, $"Rpc error: request, 注意Actor消息超时，请注意查看是否死锁或者没有reply: actorId: {self.ActorId} {self.RequestType.FullName}, response: {response}"));
                 return;
             }
 
             if (self.NeedException && ErrorCore.IsRpcNeedThrowException(response.Error))
             {
-                self.Tcs.SetException(new RpcException(response.Error, $"Rpc error: actorId: {self.ActorId} request: {self.Request}, response: {response}"));
+                self.SetException(new RpcException(response.Error, $"Rpc error: actorId: {self.ActorId} request: {self.RequestType.FullName}, response: {response}"));
                 return;
             }
 
-            self.Tcs.SetResult(response);
-            // 这里不是最终的处理位置，这里的消息会通过消息队列送到最终的Fiber，所以这里不能dispose
-            // ProcessOuterSender都是转发消息，基本上不会最终处理response，都会转发给其它Fiber处理
-            //((MessageObject)response).Dispose();
+            self.SetResult(response);
         }
 
         public static void Send(this ProcessOuterSender self, ActorId actorId, IMessage message)
@@ -204,10 +205,12 @@ namespace ET.Server
             
             int rpcId = self.GetRpcId();
 
-            var tcs = ETTask<IResponse>.Create(true);
+            iRequest.RpcId = rpcId;
 
-            self.requestCallback.Add(self.RpcId, new MessageSenderStruct(actorId, iRequest, tcs, needException));
-
+            Type requestType = iRequest.GetType();
+            MessageSenderStruct messageSenderStruct = new(actorId, requestType, needException);
+            self.requestCallback.Add(rpcId, messageSenderStruct);
+            
             self.SendInner(actorId, iRequest as MessageObject);
 
             async ETTask Timeout()
@@ -220,12 +223,12 @@ namespace ET.Server
                 
                 if (needException)
                 {
-                    action.Tcs.SetException(new Exception($"actor sender timeout: {iRequest}"));
+                    action.SetException(new Exception($"actor sender timeout: {requestType.FullName}"));
                 }
                 else
                 {
-                    IResponse response = ET.MessageHelper.CreateResponse(iRequest, ErrorCore.ERR_Timeout);
-                    action.Tcs.SetResult(response);
+                    IResponse response = MessageHelper.CreateResponse(requestType, rpcId, ErrorCore.ERR_Timeout);
+                    action.SetResult(response);
                 }
             }
 
@@ -233,14 +236,14 @@ namespace ET.Server
 
             long beginTime = TimeInfo.Instance.ServerFrameTime();
 
-            IResponse response = await tcs;
+            IResponse response = await messageSenderStruct.Wait();
 
             long endTime = TimeInfo.Instance.ServerFrameTime();
 
             long costTime = endTime - beginTime;
             if (costTime > 200)
             {
-                Log.Warning($"actor rpc time > 200: {costTime} {iRequest}");
+                Log.Warning($"actor rpc time > 200: {costTime} {requestType.FullName}");
             }
 
             return response;
