@@ -39,7 +39,6 @@ namespace ET
         {
             if (messageInfo.MessageObject is IResponse response)
             {
-                //如果该消息是返回消息，则进入处理返回消息的逻辑
                 self.HandleIActorResponse(response);
                 return;
             }
@@ -47,9 +46,7 @@ namespace ET
             ActorId actorId = messageInfo.ActorId;
             MessageObject message = messageInfo.MessageObject;
 
-            //找到该Actor的MailBoxComponent
             MailBoxComponent mailBoxComponent = self.Fiber().Mailboxes.Get(actorId.InstanceId);
-            //如果没有，则消息作废，如果消息是请求消息，则会返回一个调用错误
             if (mailBoxComponent == null)
             {
                 Log.Warning($"actor not found mailbox, from: {actorId} current: {fiber.Address} {message}");
@@ -60,7 +57,6 @@ namespace ET
                 }
                 return;
             }
-            //将需要发送的消息进行分发
             mailBoxComponent.Add(actorId.Address, message);
         }
 
@@ -100,7 +96,7 @@ namespace ET
             self.SendInner(actorId, (MessageObject)message);
         }
 
-        private static void SendInner(this ProcessInnerSender self, ActorId actorId, MessageObject message)
+        private static bool SendInner(this ProcessInnerSender self, ActorId actorId, MessageObject message)
         {
             Fiber fiber = self.Fiber();
             
@@ -110,17 +106,16 @@ namespace ET
                 throw new Exception($"actor inner process diff: {actorId.Process} {fiber.Process}");
             }
 
-            //如果是相同纤程的消息，则可以直接处理
             if (actorId.Fiber == fiber.Id)
             {
                 self.HandleMessage(fiber, new MessageInfo() {ActorId = actorId, MessageObject = message});
-                return;
+                return true;
             }
-            //否则，将消息存入对应纤程的消息队列中
-            MessageQueue.Instance.Send(fiber.Address, actorId, message);
+            
+            return MessageQueue.Instance.Send(fiber.Address, actorId, message);
         }
 
-        public static int GetRpcId(this ProcessInnerSender self)
+        private static int GetRpcId(this ProcessInnerSender self)
         {
             return ++self.RpcId;
         }
@@ -139,41 +134,28 @@ namespace ET
             {
                 throw new Exception($"actor id is 0: {request}");
             }
-
-            return await self.Call(actorId, rpcId, request, needException);
-        }
-        
-        public static async ETTask<IResponse> Call(
-                this ProcessInnerSender self,
-                ActorId actorId,
-                int rpcId,
-                IRequest iRequest,
-                bool needException = true
-        )
-        {
-            if (actorId == default)
-            {
-                throw new Exception($"actor id is 0: {iRequest}");
-            }
+            
             Fiber fiber = self.Fiber();
             if (fiber.Process != actorId.Process)
             {
                 throw new Exception($"actor inner process diff: {actorId.Process} {fiber.Process}");
             }
-            //添加进等待回复的列表内，key = rpcId
-            //返回消息会带rpcId,收到后从该列表内取出对应的事件抛出
-            Type requestType = iRequest.GetType();
+
+            Type requestType = request.GetType();
             MessageSenderStruct messageSenderStruct = new(actorId, requestType, needException);
             self.requestCallback.Add(rpcId, messageSenderStruct);
-            
-            self.SendInner(actorId, (MessageObject)iRequest);
 
-            //超时判断
+            IResponse response;
+            if (!self.SendInner(actorId, (MessageObject)request))  // 纤程不存在
+            {
+                response = MessageHelper.CreateResponse(requestType, rpcId, ErrorCore.ERR_NotFoundActor);
+                return response;
+            }
+            
             async ETTask Timeout()
             {
-                //等待超时，这里不传入
                 await fiber.Root.GetComponent<TimerComponent>().WaitAsync(ProcessInnerSender.TIMEOUT_TIME);
-                //不存在说明该消息已经收到返回并且处理了。
+
                 if (!self.requestCallback.Remove(rpcId, out MessageSenderStruct action))
                 {
                     return;
@@ -194,7 +176,7 @@ namespace ET
             
             long beginTime = TimeInfo.Instance.ServerFrameTime();
 
-            IResponse response = await messageSenderStruct.Wait();
+            response = await messageSenderStruct.Wait();
             
             long endTime = TimeInfo.Instance.ServerFrameTime();
 
